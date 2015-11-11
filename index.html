@@ -1,0 +1,368 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <meta charset="utf-8"/>
+        <style>
+            body {
+                font-family: monospace;
+            }
+            h1 {
+                font-size: 240%;
+            }
+            h2 {
+                margin: 0 0 0.45em 0;
+            }
+            .block {
+                clear: both;
+                margin-bottom: 2.5em;
+            }
+            .block h2 {
+                margin-bottom: 0.15em;
+            }
+            .char {
+                margin: 0 0.5em 0.5em 0;
+                width: 65px;
+                float: left;
+                border: 1px solid #666;
+            }
+            .char span {
+                font-family: monospace;
+                font-size: 14px;
+                display: block;
+                float: left;
+                width: 59px;
+                background: #ddd;
+                padding: 3px;
+            }
+            .cell {
+                width: 10px;
+                height: 10px;
+                border: 1px solid #999;
+                border-top-width: 0;
+                border-left-width: 0;
+                float: left;
+            }
+            .cell:nth-child(6n) {
+                border-right-width: 0;
+            }
+            .set {
+                background-color: #000;
+            }
+            #controls {
+                display: none;
+            }
+            #out {
+                clear: both;
+                margin-top: 2.5em;
+            }
+            #out label {
+                display: block;
+                clear: both;
+                margin-top: 1.0em;
+            }
+            .clearfix:after {
+                 visibility: hidden;
+                 display: block;
+                 font-size: 0;
+                 content: " ";
+                 clear: both;
+                 height: 0;
+                 }
+            .clearfix { display: inline-block; }
+            /* start commented backslash hack \*/
+            * html .clearfix { height: 1%; }
+            .clearfix { display: block; }
+            /* close commented backslash hack */
+        </style>
+        <script>
+            var fom = (function() {
+                var CHAR_WIDTH = 6,
+                CHAR_HEIGHT = 6,
+                NUM_CHARS = 128,
+                NON_PRINTABLE_CHAR_WIDTH = 1;
+
+                function setBit(targetByte, bit, val) {
+                    if (val) {
+                        return (targetByte |= (0x80 >> bit));
+                    }
+                    else {
+                        return (targetByte &= ~(0x80 >> bit));
+                    }
+                }
+
+                function getBit(sourceByte, bit) {
+                    return (sourceByte << bit) & 0x80;
+                }
+
+                function padLeft(nr, n, str){
+                    return Array(n - String(nr).length + 1).join(str || "0") + nr;
+                }
+
+                return {
+                    chars: {
+                        LABELS: [ '0x00', '0x01', '0x02', '0x03', '0x04', '0x05', '0x06', '0x07', '0x08', '0x09', '0x0A', '0x0B', '0x0C', '0x0D', '0x0E', '0x0F', '0x10', '0x11', '0x12', '0x13', '0x14', '0x15', '0x16', '0x17', '0x18', '0x19', '0x1A', '0x1B', '0x1C', '0x1D', '0x1E', '0x1F', 'space', '!', '"', '#', '$', '%', '&', '\'', '(', ')', '*', '+', ',', '-', '.', '/', '0', '1', '2', '3', '4', '5', '6', '7', '8', '9', ':', '/', '<', '=', '>', '?', '@', 'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z', '[', 'BS', ']', '^', '_', '`', 'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm', 'n', 'o', 'p', 'q', 'r', 's', 't', 'u', 'v', 'w', 'x', 'y', 'z', '{', '|', '}', '~', '7F'],
+                        rep: [],
+                        init: function() {
+                            if (!fom.storage.restore()) {
+                                console.log("init blank");
+                                for (var id=0; id<NUM_CHARS; id++) {
+                                    fom.chars.rep[id] = new Array(CHAR_HEIGHT);
+                                    for (var b=0; b<CHAR_HEIGHT; b++) {
+                                        fom.chars.rep[id][b] = 0x0;
+                                    }
+                                }
+                            }
+                            else {
+                                console.log("init from storage");
+                            }
+                        },
+                        set: function(id, x, y) {
+                            fom.chars.rep[id][y] =
+                                setBit(fom.chars.rep[id][y], x, true);
+                        },
+                        clear: function(id, x, y) {
+                            fom.chars.rep[id][y] =
+                                setBit(fom.chars.rep[id][y], x, false);
+                        },
+                        calculateWidth: function(charRep) {
+                            // Determine the first empty column,
+                            // after the last non-empty column
+                            var numSet = 0;
+                            var emptyCols = [];
+                            for (var i=0; i<CHAR_WIDTH; i++) {
+                                numSet = 0;
+                                for (var j=0; j<CHAR_HEIGHT; j++) {
+                                    if (getBit(charRep[j], i)) {
+                                        numSet++;
+                                    }
+                                }
+                                // Empty column found
+                                if (numSet == 0) {
+                                    emptyCols.push(i);
+                                }
+                            }
+                            for (var k=CHAR_WIDTH-1; k>=0; k--) {
+                                if (emptyCols.indexOf(k-1) == -1) {
+                                    if (k == 0) {
+                                        return NON_PRINTABLE_CHAR_WIDTH;
+                                    }
+                                    return k;
+                                }
+                            }
+                            return CHAR_WIDTH;
+                        },
+                        serializeChar: function(rep) {
+                            var ret = [];
+                            for (var r in rep) {
+                                ret.push(
+                                    "0x" +
+                                    padLeft(rep[r].toString(16), 2));
+                            }
+                            return ret;
+                        },
+                        serializeAllChars: function() {
+                            var ret = [];
+                            fom.chars.rep.map(function(rep) {
+                                ret.push(fom.chars.serializeChar(rep));
+                            });
+                            return ret;
+                        },
+                        stringifyFontMetrics: function() {
+                            var ret = "{";
+                            fom.chars.rep.map(function(charRep) {
+                                ret += fom.chars.calculateWidth(charRep);
+                                ret += ',';
+                            });
+                            ret += "};";
+                            return ret;
+                        },
+                        stringifyAllChars: function(serialized) {
+                            ret = '';
+                            serialized.map(function(c, id) {
+                                ret += '{';
+                                c.map(function(b, j) {
+                                    if (j < CHAR_WIDTH-1) {
+                                        ret += (b + ',');
+                                    }
+                                    else {
+                                        ret += b;
+                                    }
+                                });
+                                ret += '}';
+                                if (id < NUM_CHARS-1) {
+                                    ret += ',';
+                                }
+                                ret += ' //' + fom.chars.LABELS[id];
+                                ret += "\n";
+                            });
+                            return ret;
+                        }
+                    },
+                    out: {
+                        c: {
+                            chars_rep: null,
+                            font_metrics_rep: null,
+
+                            onchange: function() {
+                                fom.out.c.parse();
+                                fom.display.redraw();
+                                fom.storage.save();
+                            },
+                            parse: function() {
+                                var charStrs = fom.out.c.chars_rep.value.split(/,[^\d].+\n/);
+                                for (var id in charStrs) {
+                                    charStrs[id] =
+                                        charStrs[id].replace(/{/, '');
+                                    charStrs[id] =
+                                        charStrs[id].replace(/}.*/, '');
+
+                                    fom.chars.rep[id] =
+                                        charStrs[id].split(',').map(function(s) {
+                                            return parseInt(s, 16);
+                                        });
+                                }
+                            },
+                            render: function() {
+                                fom.out.c.font_metrics_rep.value =
+                                    fom.chars.stringifyFontMetrics();
+
+                                fom.out.c.chars_rep.value =
+                                    fom.chars.stringifyAllChars(
+                                        fom.chars.serializeAllChars());
+                            }
+                        },
+                        init: function() {
+                            fom.out.c.chars_rep = document.getElementById("chars_c");
+                            fom.out.c.font_metrics_rep = document.getElementById("font_metrics_c");
+                            fom.out.c.chars_rep.addEventListener('input', fom.out.c.onchange, false);
+                            fom.out.c.render();
+                        },
+                    },
+                    display: {
+                        rep: [],
+                        root: null,
+                        init: function() {
+                            fom.display.root = document.getElementById("container");
+                            for (var i=0; i<NUM_CHARS; i++) {
+                                fom.display.rep[i] = fom.display.initChar(i);
+                            }
+                        },
+                        redraw: function() {
+                            for (var id in fom.chars.rep) {
+                                fom.chars.rep[id].map(function(b, row) {
+                                    for (var j=0; j<CHAR_WIDTH; j++) {
+                                        if (getBit(b, j)) {
+                                            // Set the cell
+                                            fom.display.rep[id]
+                                                .childNodes[row*CHAR_WIDTH + j]
+                                                .classList.add("set");
+                                        }
+                                        else {
+                                            // clear the cell
+                                            fom.display.rep[id]
+                                                .childNodes[row*CHAR_WIDTH + j]
+                                                .classList.remove("set");
+                                        }
+                                    }
+                                });
+                            }
+                        },
+                        initChar: function(id) {
+                            // Create a char holder
+                            var charRep = document.createElement("div");
+                            charRep.setAttribute("class", "char");
+
+                            // Add the cells to the char holder
+                            for (var j=0; j<CHAR_HEIGHT; j++) {
+                                for (var i=0; i<CHAR_WIDTH; i++) {
+                                    var cellRep = document.createElement("div");
+                                    cellRep.setAttribute("class", "cell");
+                                    fom.display._addClick(cellRep, id, i, j);
+                                    charRep.appendChild(cellRep);
+                                }
+                            }
+
+                            // Add a label to the char holder
+                            var charLabel = document.createElement("span");
+                            charLabel.appendChild(
+                                document.createTextNode(
+                                    fom.chars.LABELS[id]));
+                            charRep.appendChild(charLabel);
+
+                            // Add the char holder to the document
+                            fom.display.root.appendChild(charRep);
+
+                            return charRep;
+                        },
+                        _addClick: function(el, id, x, y) {
+                            el.addEventListener('click', function() {
+                                fom.display.clickCell(el, id, x, y);
+                            }, false);
+                        },
+                        clickCell: function(el, id, x, y) {
+                            el.classList.toggle("set");
+                            if (el.classList.contains("set")) {
+                                fom.chars.set(id, x, y);
+                            }
+                            else {
+                                fom.chars.clear(id, x, y);
+                            }
+                            fom.out.c.render();
+                            fom.storage.save();
+                        }
+                    },
+                    storage: {
+                        _key: '_fom_chars_rep_',
+                        _store: null,
+                        init: function() {
+                            fom.storage._store = window.localStorage;
+                        },
+                        save: function() {
+                            fom.storage._store.setItem(
+                                                fom.storage._key,
+                                                JSON.stringify(fom.chars.rep));
+                        },
+                        restore: function() {
+                            var saved =
+                                fom.storage._store.getItem(fom.storage._key);
+
+                            if (saved == null || saved == 'null') {
+                                return false;
+                            }
+
+                            fom.chars.rep = JSON.parse(saved);
+                            fom.display.redraw();
+                            return true;
+                        },
+                        clear: function() {
+                            fom.storage._store.setItem(fom.storage._key, null);
+                        }
+                    },
+                    init: function() {
+                        fom.storage.init();
+                        fom.display.init();
+                        fom.chars.init();
+                        fom.out.init();
+                    }
+                }
+            })();
+            window.onload = fom.init;
+        </script>
+    </head>
+    <body>
+        <h1>Bitfont Editor</h1>
+        <h2>Glyphs</h2>
+        <div id="container" class="clearfix"></div>
+        <div id="out">
+            <div class="block">
+                <h2>Font metrics (C)</h2>
+                <textarea id="font_metrics_c" cols="100" rows="2"></textarea>
+            </div>
+
+            <div class="block">
+                <h2>Font characters (C)</h2>
+                <textarea id="chars_c" cols="100" rows="10"></textarea>
+            </div>
+        </div>
+    </body>
+</html>
