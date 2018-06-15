@@ -77,9 +77,9 @@
         <script>
             var fom = (function() {
                 var CHAR_WIDTH = 6,
-                CHAR_HEIGHT = 6,
-                NUM_CHARS = 128,
-                NON_PRINTABLE_CHAR_WIDTH = 1;
+                    CHAR_HEIGHT = 6,
+                    NUM_CHARS = 128,
+                    NON_PRINTABLE_CHAR_WIDTH = 1;
 
                 function setBit(targetByte, bit, val) {
                     if (val) {
@@ -160,10 +160,25 @@
                             }
                             return ret;
                         },
+                        hexSerializeChar: function(rep) {
+                            var ret = [];
+                            for (var r in rep) {
+                                ret.push(
+                                    padLeft(rep[r].toString(16), 2));
+                            }
+                            return ret;
+                        },
                         serializeAllChars: function() {
                             var ret = [];
                             fom.chars.rep.map(function(rep) {
                                 ret.push(fom.chars.serializeChar(rep));
+                            });
+                            return ret;
+                        },
+                        hexSerializeAllChars: function() {
+                            var ret = [];
+                            fom.chars.rep.map(function(rep) {
+                                ret.push(fom.chars.hexSerializeChar(rep));
                             });
                             return ret;
                         },
@@ -195,6 +210,21 @@
                                 ret += ' //' + fom.chars.LABELS[id];
                                 ret += "\n";
                             });
+                            return ret;
+                        },
+                        hexStringifyAllChars: function(serialized) {
+                            ret = '[\n';
+                            serialized.map(function(c, id) {
+                                ret += padLeft(id.toString(16), 4) + ':';
+                                c.map(function(b, j) {
+                                    ret += b;
+                                });
+                                if (id < NUM_CHARS-1) {
+                                    ret += ',';
+                                }
+                                ret += "\n";
+                            });
+                            ret += ']\n';
                             return ret;
                         }
                     },
@@ -229,13 +259,21 @@
                                 fom.out.c.chars_rep.value =
                                     fom.chars.stringifyAllChars(
                                         fom.chars.serializeAllChars());
+                            },
+                            hexRender: function() {
+                                fom.out.c.font_metrics_rep.value =
+                                    fom.chars.stringifyFontMetrics();
+
+                                fom.out.c.chars_rep.value =
+                                    fom.chars.hexStringifyAllChars(
+                                        fom.chars.hexSerializeAllChars());
                             }
                         },
                         init: function() {
                             fom.out.c.chars_rep = document.getElementById("chars_c");
                             fom.out.c.font_metrics_rep = document.getElementById("font_metrics_c");
                             fom.out.c.chars_rep.addEventListener('input', fom.out.c.onchange, false);
-                            fom.out.c.render();
+                            fom.out.c.hexRender();
                         },
                     },
                     display: {
@@ -307,7 +345,7 @@
                             else {
                                 fom.chars.clear(id, x, y);
                             }
-                            fom.out.c.render();
+                            fom.out.c.hexRender();
                             fom.storage.save();
                         }
                     },
@@ -326,11 +364,13 @@
                             var saved =
                                 fom.storage._store.getItem(fom.storage._key);
 
-                            if (saved == null || saved == 'null') {
+                            if (saved) {
+                                fom.chars.rep = JSON.parse(saved);
+                            }
+                            else {
                                 return false;
                             }
 
-                            fom.chars.rep = JSON.parse(saved);
                             fom.display.redraw();
                             return true;
                         },
